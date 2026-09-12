@@ -3,5 +3,6 @@ import App from "./App";
 import "./styles.css";
 import "./product.css";
 import "./studio.css";
+import "./themes.css";
 
 createRoot(document.getElementById("root")!).render(<App />);

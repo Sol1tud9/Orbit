@@ -6,12 +6,18 @@ from threading import Lock
 from .engine import CalculationCancelled, simulate
 from .storage import Store
 from .resilience import n_minus_one, recommendations
+from .optimization import optimize
 
 logger = logging.getLogger(__name__)
 
 
 def perform_run(
-    directory: str, run_id: str, scenario: dict, kind="simulation", parent_run_id=None
+    directory: str,
+    run_id: str,
+    scenario: dict,
+    kind="simulation",
+    parent_run_id=None,
+    options=None,
 ):
     store = Store(directory)
     if not store.start(run_id):
@@ -22,11 +28,15 @@ def perform_run(
             if kind == "simulation"
             else n_minus_one
             if kind == "n_minus_one"
+            else optimize
+            if kind == "optimization"
             else recommendations
         )
         arguments = (
             {} if kind == "simulation" else {"baseline": store.result(parent_run_id)}
         )
+        if kind == "optimization":
+            arguments["options"] = options
         result = calculate(
             scenario,
             **arguments,
@@ -56,7 +66,9 @@ class JobManager:
         self.futures = {}
         self.lock = Lock()
 
-    def submit(self, run_id, scenario, kind="simulation", parent_run_id=None):
+    def submit(
+        self, run_id, scenario, kind="simulation", parent_run_id=None, options=None
+    ):
         future = self.pool.submit(
             perform_run,
             str(self.store.directory),
@@ -64,6 +76,7 @@ class JobManager:
             scenario,
             kind,
             parent_run_id,
+            options,
         )
         with self.lock:
             self.futures[run_id] = future

@@ -21,6 +21,9 @@ import {
   AlertTriangle,
   Target,
   Route as RouteIcon,
+  Moon,
+  Sun,
+  Sparkles,
 } from "lucide-react";
 import { ApiError, download, post, request } from "./api";
 import {
@@ -36,6 +39,7 @@ import Timeline from "./Timeline";
 import ScenarioEditor from "./ScenarioEditor";
 import ComparisonView from "./ComparisonView";
 import ResilienceView from "./ResilienceView";
+import OptimizationView from "./OptimizationView";
 import SnapshotDetails from "./SnapshotDetails";
 import { useAnalysisTool } from "./webmcp";
 import type { Run, RunResult, Scenario, Snapshot } from "./types";
@@ -52,9 +56,22 @@ const statusText: Record<Run["status"], string> = {
 };
 
 export default function App() {
+  const [dark, setDark] = useState(
+    () => document.documentElement.dataset.theme === "dark",
+  );
+  useEffect(() => {
+    const theme = dark ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", dark ? "#202c32" : "#eeeee4");
+    try {
+      localStorage.setItem("orbita:theme", theme);
+    } catch {}
+  }, [dark]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [mode, setMode] = useState<
-    "research" | "design" | "compare" | "resilience"
+    "research" | "design" | "compare" | "resilience" | "optimize"
   >("research");
   const [parentRevision, setParentRevision] = useState<string | null>(null);
   const [editorScenario, setEditorScenario] = useState<Scenario | null>(null);
@@ -353,6 +370,14 @@ export default function App() {
         </a>
         <div className="header-actions">
           <button
+            className="theme-toggle"
+            onClick={() => setDark(!dark)}
+            aria-label={dark ? "Светлая тема" : "Тёмная тема"}
+            title={dark ? "Светлая тема" : "Тёмная тема"}
+          >
+            {dark ? <Sun size={19} /> : <Moon size={19} />}
+          </button>
+          <button
             className={`quiet ${historyOpen ? "active" : ""}`}
             onClick={openHistory}
           >
@@ -373,6 +398,7 @@ export default function App() {
                   design: "Проектирование",
                   compare: "Сравнение вариантов",
                   resilience: "Устойчивость сети",
+                  optimize: "Автоподбор вариантов",
                 }[mode]
               }
             </h1>
@@ -386,6 +412,7 @@ export default function App() {
               ["design", "Проектирование"],
               ["compare", "Сравнение A/B"],
               ["resilience", "Устойчивость"],
+              ["optimize", "Автоподбор"],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -409,6 +436,8 @@ export default function App() {
                 <SlidersHorizontal size={19} />
               ) : key === "compare" ? (
                 <RouteIcon size={19} />
+              ) : key === "optimize" ? (
+                <Sparkles size={19} />
               ) : (
                 <ShieldCheck size={19} />
               )}
@@ -439,6 +468,14 @@ export default function App() {
         )}
         {mode === "resilience" && (
           <ResilienceView run={run} result={result} onVariant={editVariant} />
+        )}
+        {mode === "optimize" && (
+          <OptimizationView
+            key={run?.id ?? "empty"}
+            run={run}
+            result={result}
+            onVariant={editVariant}
+          />
         )}
         <div hidden={mode !== "research"}>
           <section

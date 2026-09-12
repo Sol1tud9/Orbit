@@ -23,13 +23,16 @@ from .scenario import (
 from .storage import Store
 from .comparison import compare_results
 from .resilience import recommendation_candidates, snapshot_diagnostics
-from pydantic import BaseModel
+from .optimization import SearchOptions, search_plan
+from pydantic import BaseModel, ConfigDict
 from typing import Literal
 
 
 class ExperimentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     run_id: str
-    kind: Literal["n_minus_one", "recommendations"]
+    kind: Literal["n_minus_one", "recommendations", "optimization"]
+    options: SearchOptions | None = None
 
 
 MAX_UPLOAD = 10 * 1024 * 1024
@@ -307,9 +310,11 @@ def create_app(
 
     @app.get("/api/experiments")
     def experiments(request: Request):
-        rows = app.state.store.list(
-            request.state.owner, "n_minus_one"
-        ) + app.state.store.list(request.state.owner, "recommendations")
+        rows = (
+            app.state.store.list(request.state.owner, "n_minus_one")
+            + app.state.store.list(request.state.owner, "recommendations")
+            + app.state.store.list(request.state.owner, "optimization")
+        )
         return sorted(rows, key=lambda r: r["created_at"], reverse=True)
 
     @app.post("/api/experiments", status_code=202)
@@ -321,8 +326,28 @@ def create_app(
         count = baseline["total"]
         satellites = len(scenario["design"]["satellites"])
         clients = sum(g["role"] == "client" for g in scenario["ground_sites"])
+        options = None
+        if payload.kind == "optimization":
+            try:
+                plan = search_plan(
+                    scenario, payload.options.model_dump() if payload.options else None
+                )
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            options = plan["options"]
+            if not plan["candidates"]:
+                raise HTTPException(
+                    422,
+                    "Нет новых сочетаний. Увеличьте дальность, сдвиг фаз или разрешите следующие очереди.",
+                )
+        elif payload.options is not None:
+            raise HTTPException(
+                422, "Параметры поиска допустимы только для автоподбора"
+            )
         cases = (
-            sum(
+            len(plan["candidates"])
+            if payload.kind == "optimization"
+            else sum(
                 s["launch_batch"] <= scenario["design"]["launch_stage"]
                 for s in scenario["design"]["satellites"]
             )
@@ -350,11 +375,14 @@ def create_app(
                 kind=payload.kind,
                 parent_run_id=payload.run_id,
                 total_override=count * max(1, cases),
+                options=options,
             )
         except OverflowError as exc:
             raise HTTPException(429, str(exc)) from exc
         try:
-            app.state.jobs.submit(run["id"], scenario, payload.kind, payload.run_id)
+            app.state.jobs.submit(
+                run["id"], scenario, payload.kind, payload.run_id, options
+            )
         except Exception:
             app.state.store.fail(run["id"], "Не удалось запустить эксперимент")
             raise HTTPException(503, "Расчётный процесс недоступен")

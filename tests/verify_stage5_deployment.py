@@ -2,10 +2,14 @@ import argparse
 import json
 from pathlib import Path
 import time
+import tomllib
 
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
+VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"][
+    "version"
+]
 
 
 def main():
@@ -18,7 +22,7 @@ def main():
     with httpx.Client(base_url=args.url, timeout=30) as client:
         client.cookies.update(state["cookies"])
         health = client.get("/api/health").json()
-        assert health["version"] == "0.5.0"
+        assert health["version"] == VERSION
         if args.resume:
             saved = json.loads(checkpoint.read_text("utf-8"))
             for run_id in saved["experiments"]:

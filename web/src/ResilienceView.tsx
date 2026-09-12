@@ -59,7 +59,9 @@ export default function ResilienceView({
     request<Run[]>("/experiments")
       .then((rows) => {
         if (disposed) return;
-        const matches = rows.filter((r) => r.parent_run_id === run?.id);
+        const matches = rows.filter(
+          (r) => r.parent_run_id === run?.id && r.kind !== "optimization",
+        );
         setJobs(matches);
         if (matches[0]) setJobId(matches[0].id);
       })

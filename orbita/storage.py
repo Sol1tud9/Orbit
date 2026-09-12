@@ -48,7 +48,9 @@ class Store:
                     "ALTER TABLE runs ADD COLUMN kind TEXT NOT NULL DEFAULT 'simulation'"
                 )
                 db.execute("ALTER TABLE runs ADD COLUMN parent_run_id TEXT")
-            db.execute("PRAGMA user_version=2")
+            if "options" not in run_columns:
+                db.execute("ALTER TABLE runs ADD COLUMN options TEXT")
+            db.execute("PRAGMA user_version=3")
 
     @contextmanager
     def connect(self):
@@ -78,6 +80,7 @@ class Store:
         kind="simulation",
         parent_run_id=None,
         total_override=None,
+        options=None,
     ) -> dict:
         revision_id, run_id = uuid.uuid4().hex, uuid.uuid4().hex
         timestamp = now()
@@ -111,8 +114,19 @@ class Store:
                 ),
             )
             db.execute(
-                "INSERT INTO runs (id,owner,revision_id,status,total,created_at,kind,parent_run_id) VALUES (?,?,?,'queued',?,?,?,?)",
-                (run_id, owner, revision_id, total, timestamp, kind, parent_run_id),
+                "INSERT INTO runs (id,owner,revision_id,status,total,created_at,kind,parent_run_id,options) VALUES (?,?,?,'queued',?,?,?,?,?)",
+                (
+                    run_id,
+                    owner,
+                    revision_id,
+                    total,
+                    timestamp,
+                    kind,
+                    parent_run_id,
+                    json.dumps(options, allow_nan=False)
+                    if options is not None
+                    else None,
+                ),
             )
         return self.get(run_id, owner)
 
@@ -123,6 +137,9 @@ class Store:
         result = dict(row)
         result.pop("owner", None)
         result.pop("cancel_requested", None)
+        result["options"] = (
+            json.loads(result["options"]) if result.get("options") else None
+        )
         if "scenario" in result:
             result["effective_scenario"] = json.loads(result.pop("scenario"))
         result["summary"] = (

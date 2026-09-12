@@ -3,7 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f6f5f1" />
+    <meta name="theme-color" content="#eeeee4" />
+    <script>
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem("orbita:theme") === "dark" ? "dark" : "light";
+      } catch {}
+    </script>
     <meta
       name="description"
       content="Орбита — проектирование спутниковой группировки, анализ покрытия, маршрутов и перерывов связи."

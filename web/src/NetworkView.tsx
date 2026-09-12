@@ -332,32 +332,48 @@ export default function NetworkView({
               </text>
             </>
           )}
-          {snapshot?.edges.map(([a, b], i) => {
-            const first = byId.get(a),
-              second = byId.get(b);
-            if (
-              !first?.shown ||
-              !second?.shown ||
-              !first.point ||
-              !second.point
+          {snapshot?.edges
+            .slice()
+            .sort(
+              (a, b) =>
+                Number(routeEdges.has(JSON.stringify(a.slice(0, 2).sort()))) -
+                Number(routeEdges.has(JSON.stringify(b.slice(0, 2).sort()))),
             )
-              return null;
-            const inRoute = routeEdges.has(JSON.stringify([a, b].sort()));
-            const adjacent = selected === a || selected === b;
-            if (!allLinks && !inRoute && !adjacent) return null;
-            return (
-              <line
-                key={i}
-                x1={first.point[0]}
-                y1={first.point[1]}
-                x2={second.point[0]}
-                y2={second.point[1]}
-                stroke={inRoute ? "#6ce9cc" : adjacent ? "#8cb7ec" : "#698398"}
-                strokeWidth={inRoute ? 2.4 : 0.8}
-                strokeOpacity={inRoute ? 1 : adjacent ? 0.7 : 0.23}
-              />
-            );
-          })}
+            .map(([a, b], i) => {
+              const first = byId.get(a),
+                second = byId.get(b);
+              if (
+                !first?.shown ||
+                !second?.shown ||
+                !first.point ||
+                !second.point
+              )
+                return null;
+              const inRoute = routeEdges.has(JSON.stringify([a, b].sort()));
+              const adjacent = selected === a || selected === b;
+              if (!allLinks && !inRoute && !adjacent) return null;
+              return (
+                <g
+                  key={i}
+                  className={`contact-edge ${inRoute ? "route-edge" : adjacent ? "adjacent-edge" : ""}`}
+                >
+                  <line
+                    x1={first.point[0]}
+                    y1={first.point[1]}
+                    x2={second.point[0]}
+                    y2={second.point[1]}
+                    className="edge-outline"
+                  />
+                  <line
+                    x1={first.point[0]}
+                    y1={first.point[1]}
+                    x2={second.point[0]}
+                    y2={second.point[1]}
+                    className="edge-color"
+                  />
+                </g>
+              );
+            })}
           {nodes
             .filter((n) => n.shown && n.point)
             .map((node) => {

@@ -56,6 +56,48 @@ export default function GlobeView({
   );
   const position = (n: { x_km: number; y_km: number; z_km: number }) =>
     globePoint(n.x_km, n.y_km, n.z_km, ...camera);
+  const labelOffsets = new Map<string, [number, number]>();
+  const boxes: { x: number; y: number; w: number; h: number }[] = [];
+  if (labels) {
+    for (const node of nodes
+      .slice()
+      .sort(
+        (a, b) => Number(route.includes(b.id)) - Number(route.includes(a.id)),
+      )) {
+      const p = position(node);
+      if (!p.visible) continue;
+      const width = node.id.length * 7 + 5;
+      for (const [dx, dy] of [
+        [10, -9],
+        [10, 16],
+        [-width - 10, -9],
+        [-width - 10, 16],
+        [10, -28],
+        [10, 34],
+        [-width - 10, -28],
+        [-width - 10, 34],
+      ]) {
+        const box = { x: p.x + dx, y: p.y + dy - 11, w: width, h: 16 };
+        if (
+          box.x < 153 ||
+          box.x + box.w > 627 ||
+          box.y < 5 ||
+          box.y + box.h > 515 ||
+          boxes.some(
+            (b) =>
+              box.x < b.x + b.w &&
+              box.x + box.w > b.x &&
+              box.y < b.y + b.h &&
+              box.y + box.h > b.y,
+          )
+        )
+          continue;
+        boxes.push(box);
+        labelOffsets.set(node.id, [dx, dy]);
+        break;
+      }
+    }
+  }
   const edgePath = (a: (typeof nodes)[number], b: (typeof nodes)[number]) => {
     let d = "",
       previous = false;
@@ -143,22 +185,28 @@ export default function GlobeView({
           strokeWidth=".55"
           strokeOpacity=".22"
         />
-        {snapshot?.edges.map(([a, b], i) => {
-          const first = byId.get(a),
-            second = byId.get(b);
-          const chosen = routeEdges.has(JSON.stringify([a, b].sort()));
-          if (!first || !second || (!allLinks && !chosen)) return null;
-          return (
-            <path
-              key={i}
-              d={edgePath(first, second)}
-              fill="none"
-              stroke={chosen ? "#6ce9cc" : "#7a9eb0"}
-              strokeWidth={chosen ? 2.2 : 0.7}
-              opacity={chosen ? 1 : 0.35}
-            />
-          );
-        })}
+        {snapshot?.edges
+          .slice()
+          .sort(
+            (a, b) =>
+              Number(routeEdges.has(JSON.stringify(a.slice(0, 2).sort()))) -
+              Number(routeEdges.has(JSON.stringify(b.slice(0, 2).sort()))),
+          )
+          .map(([a, b], i) => {
+            const first = byId.get(a),
+              second = byId.get(b);
+            const chosen = routeEdges.has(JSON.stringify([a, b].sort()));
+            if (!first || !second || (!allLinks && !chosen)) return null;
+            return (
+              <g
+                key={i}
+                className={chosen ? "contact-edge route-edge" : "contact-edge"}
+              >
+                <path d={edgePath(first, second)} className="edge-outline" />
+                <path d={edgePath(first, second)} className="edge-color" />
+              </g>
+            );
+          })}
         {nodes.map((n) => {
           const p = position(n);
           if (!p.visible) return null;
@@ -192,17 +240,18 @@ export default function GlobeView({
                 }
                 stroke={route.includes(n.id) ? "#e9fffa" : "#101e2b"}
               />
-              {labels && (
-                <text x="9" y="-9" className="node-label">
+              {labelOffsets.has(n.id) && (
+                <text
+                  x={labelOffsets.get(n.id)![0]}
+                  y={labelOffsets.get(n.id)![1]}
+                  className="node-label"
+                >
                   {n.id}
                 </text>
               )}
             </g>
           );
         })}
-        <text x="390" y="493" textAnchor="middle" className="map-coordinate">
-          Потяните, чтобы повернуть
-        </text>
       </svg>
       <div className="globe-controls">
         <label>
