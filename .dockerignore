@@ -1,0 +1,14 @@
+.git
+.venv
+**/node_modules
+web/dist
+var
+research/pdf-render
+research/pdf-text
+**/__pycache__
+.pytest_cache
+.hypothesis
+web/test-results
+web/playwright-report
+.env
+output

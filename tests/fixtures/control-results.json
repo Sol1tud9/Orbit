@@ -1,0 +1,97 @@
+{
+  "geometry_sha256": "2f7dc14f7e826c2815bbbb2ecbd67ef26e81f092b15c06e197b31dd3ff66daf6",
+  "scenarios": {
+    "01_full_constellation": {
+      "source_sha256": "e345dca40c208c78ddc14b039613be9a159095271a3efd66bc10331dc1e242fd",
+      "clients": {
+        "C65": {
+          "visible_samples": 704,
+          "reachable_samples": 696,
+          "max_outage_s": 480,
+          "outage_count": 19
+        },
+        "C70": {
+          "visible_samples": 719,
+          "reachable_samples": 711,
+          "max_outage_s": 120,
+          "outage_count": 9
+        },
+        "C72": {
+          "visible_samples": 720,
+          "reachable_samples": 712,
+          "max_outage_s": 120,
+          "outage_count": 8
+        }
+      }
+    },
+    "02_first_launch": {
+      "source_sha256": "7137f450ce43bba79300221b704ea0b3365c9769a04794c7695061845bd2dc4d",
+      "clients": {
+        "C65": {
+          "visible_samples": 275,
+          "reachable_samples": 196,
+          "max_outage_s": 34320,
+          "outage_count": 25
+        },
+        "C70": {
+          "visible_samples": 351,
+          "reachable_samples": 114,
+          "max_outage_s": 39480,
+          "outage_count": 34
+        },
+        "C72": {
+          "visible_samples": 421,
+          "reachable_samples": 91,
+          "max_outage_s": 47760,
+          "outage_count": 34
+        }
+      }
+    },
+    "03_satellite_outages": {
+      "source_sha256": "389bbc107665374c28baa09d67d416687d91695b463c2e40a06394bf729f2767",
+      "clients": {
+        "C65": {
+          "visible_samples": 609,
+          "reachable_samples": 571,
+          "max_outage_s": 1440,
+          "outage_count": 47
+        },
+        "C70": {
+          "visible_samples": 650,
+          "reachable_samples": 582,
+          "max_outage_s": 1440,
+          "outage_count": 43
+        },
+        "C72": {
+          "visible_samples": 670,
+          "reachable_samples": 594,
+          "max_outage_s": 1200,
+          "outage_count": 45
+        }
+      }
+    },
+    "04_link_range": {
+      "source_sha256": "01e679100e6a415bf697983ad8d5f485d9f52e38c0a1f514d2def9ef8411c371",
+      "clients": {
+        "C65": {
+          "visible_samples": 704,
+          "reachable_samples": 558,
+          "max_outage_s": 5640,
+          "outage_count": 86
+        },
+        "C70": {
+          "visible_samples": 719,
+          "reachable_samples": 448,
+          "max_outage_s": 10680,
+          "outage_count": 105
+        },
+        "C72": {
+          "visible_samples": 720,
+          "reachable_samples": 469,
+          "max_outage_s": 240,
+          "outage_count": 176
+        }
+      }
+    }
+  }
+}

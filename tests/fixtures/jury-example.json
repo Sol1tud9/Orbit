@@ -1,0 +1,81 @@
+{
+  "schema_version": "cosmo-A-1.0",
+  "meta": {
+    "id": "jury-independent",
+    "title": "Два шлюза · проверка новых данных"
+  },
+  "environment": {
+    "altitude_km": 550.0,
+    "inclination_deg": 87.0,
+    "earth_angle0_deg": 0,
+    "horizon_s": 360,
+    "step_s": 120,
+    "min_elevation_deg": 0,
+    "isl_range_km": 3000.0,
+    "target_availability": 0.9
+  },
+  "design": {
+    "launch_stage": 3,
+    "planes": [
+      {
+        "id": "Plane-independent",
+        "raan_deg": 0,
+        "phase_deg": 0
+      }
+    ],
+    "satellites": [
+      {
+        "id": "Relay-X",
+        "plane_id": "Plane-independent",
+        "slot_deg": 0,
+        "launch_batch": 1
+      },
+      {
+        "id": "Relay-Y",
+        "plane_id": "Plane-independent",
+        "slot_deg": 0,
+        "launch_batch": 1
+      }
+    ]
+  },
+  "ground_sites": [
+    {
+      "id": "Терминал-А",
+      "name": "Дополнительный терминал",
+      "role": "client",
+      "lat_deg": 0,
+      "lon_deg": 0
+    },
+    {
+      "id": "Exit-one",
+      "name": "Первый шлюз",
+      "role": "gateway",
+      "lat_deg": 0,
+      "lon_deg": 0
+    },
+    {
+      "id": "Exit-two",
+      "name": "Второй шлюз",
+      "role": "gateway",
+      "lat_deg": 0,
+      "lon_deg": 0
+    }
+  ],
+  "failures": [],
+  "gateway_outages": [
+    {
+      "gateway_id": "Exit-one",
+      "start_s": 0,
+      "end_s": 360
+    },
+    {
+      "gateway_id": "Exit-two",
+      "start_s": 61,
+      "end_s": 181
+    }
+  ],
+  "jury_extension": {
+    "preserved": true,
+    "notes": "Данные вне основного набора"
+  }
+}

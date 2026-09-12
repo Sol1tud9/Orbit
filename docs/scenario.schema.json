@@ -1,0 +1,325 @@
+{
+  "$defs": {
+    "Design": {
+      "additionalProperties": true,
+      "properties": {
+        "launch_stage": {
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Launch Stage",
+          "type": "integer"
+        },
+        "planes": {
+          "items": {
+            "$ref": "#/$defs/Plane"
+          },
+          "minItems": 1,
+          "title": "Planes",
+          "type": "array"
+        },
+        "satellites": {
+          "items": {
+            "$ref": "#/$defs/Satellite"
+          },
+          "minItems": 1,
+          "title": "Satellites",
+          "type": "array"
+        }
+      },
+      "required": [
+        "launch_stage",
+        "planes",
+        "satellites"
+      ],
+      "title": "Design",
+      "type": "object"
+    },
+    "Environment": {
+      "additionalProperties": true,
+      "properties": {
+        "altitude_km": {
+          "maximum": 1200.0,
+          "minimum": 200.0,
+          "title": "Altitude Km",
+          "type": "number"
+        },
+        "inclination_deg": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 180.0,
+          "title": "Inclination Deg",
+          "type": "number"
+        },
+        "earth_angle0_deg": {
+          "title": "Earth Angle0 Deg",
+          "type": "number"
+        },
+        "horizon_s": {
+          "exclusiveMinimum": 0,
+          "maximum": 172800,
+          "title": "Horizon S",
+          "type": "integer"
+        },
+        "step_s": {
+          "exclusiveMinimum": 0,
+          "title": "Step S",
+          "type": "integer"
+        },
+        "min_elevation_deg": {
+          "exclusiveMaximum": 90.0,
+          "minimum": 0.0,
+          "title": "Min Elevation Deg",
+          "type": "number"
+        },
+        "isl_range_km": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 10000.0,
+          "title": "Isl Range Km",
+          "type": "number"
+        },
+        "target_availability": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Target Availability",
+          "type": "number"
+        }
+      },
+      "required": [
+        "altitude_km",
+        "inclination_deg",
+        "earth_angle0_deg",
+        "horizon_s",
+        "step_s",
+        "min_elevation_deg",
+        "isl_range_km",
+        "target_availability"
+      ],
+      "title": "Environment",
+      "type": "object"
+    },
+    "Failure": {
+      "additionalProperties": true,
+      "properties": {
+        "satellite_id": {
+          "minLength": 1,
+          "title": "Satellite Id",
+          "type": "string"
+        },
+        "start_s": {
+          "title": "Start S",
+          "type": "number"
+        },
+        "end_s": {
+          "title": "End S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "satellite_id",
+        "start_s",
+        "end_s"
+      ],
+      "title": "Failure",
+      "type": "object"
+    },
+    "GatewayOutage": {
+      "additionalProperties": true,
+      "properties": {
+        "gateway_id": {
+          "minLength": 1,
+          "title": "Gateway Id",
+          "type": "string"
+        },
+        "start_s": {
+          "title": "Start S",
+          "type": "number"
+        },
+        "end_s": {
+          "title": "End S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "gateway_id",
+        "start_s",
+        "end_s"
+      ],
+      "title": "GatewayOutage",
+      "type": "object"
+    },
+    "GroundSite": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "client",
+            "gateway"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "lat_deg": {
+          "maximum": 90.0,
+          "minimum": -90.0,
+          "title": "Lat Deg",
+          "type": "number"
+        },
+        "lon_deg": {
+          "maximum": 180.0,
+          "minimum": -180.0,
+          "title": "Lon Deg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "role",
+        "lat_deg",
+        "lon_deg"
+      ],
+      "title": "GroundSite",
+      "type": "object"
+    },
+    "Meta": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "Meta",
+      "type": "object"
+    },
+    "Plane": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "raan_deg": {
+          "exclusiveMaximum": 360.0,
+          "minimum": 0.0,
+          "title": "Raan Deg",
+          "type": "number"
+        },
+        "phase_deg": {
+          "exclusiveMaximum": 360.0,
+          "minimum": 0.0,
+          "title": "Phase Deg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "raan_deg",
+        "phase_deg"
+      ],
+      "title": "Plane",
+      "type": "object"
+    },
+    "Satellite": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "plane_id": {
+          "minLength": 1,
+          "title": "Plane Id",
+          "type": "string"
+        },
+        "slot_deg": {
+          "title": "Slot Deg",
+          "type": "number"
+        },
+        "launch_batch": {
+          "maximum": 3.0,
+          "minimum": 1.0,
+          "title": "Launch Batch",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "plane_id",
+        "slot_deg",
+        "launch_batch"
+      ],
+      "title": "Satellite",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "const": "cosmo-A-1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "meta": {
+      "$ref": "#/$defs/Meta"
+    },
+    "environment": {
+      "$ref": "#/$defs/Environment"
+    },
+    "design": {
+      "$ref": "#/$defs/Design"
+    },
+    "ground_sites": {
+      "items": {
+        "$ref": "#/$defs/GroundSite"
+      },
+      "title": "Ground Sites",
+      "type": "array"
+    },
+    "failures": {
+      "items": {
+        "$ref": "#/$defs/Failure"
+      },
+      "title": "Failures",
+      "type": "array"
+    },
+    "gateway_outages": {
+      "items": {
+        "$ref": "#/$defs/GatewayOutage"
+      },
+      "title": "Gateway Outages",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "meta",
+    "environment",
+    "design",
+    "ground_sites",
+    "failures",
+    "gateway_outages"
+  ],
+  "title": "Scenario",
+  "type": "object"
+}

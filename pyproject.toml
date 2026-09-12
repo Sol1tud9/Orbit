@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbita-lab"
+version = "0.2.0"
+description = "Reproducible constellation reachability analysis for cosmo-A-1.0"
+requires-python = ">=3.12"
+dependencies = ["numpy==2.4.2", "fastapi==0.115.8", "pydantic==2.10.6", "uvicorn==0.34.0"]
+
+[project.optional-dependencies]
+test = ["pytest==8.3.4", "httpx==0.28.1", "hypothesis==6.131.9"]
+
+[project.scripts]
+orbita = "orbita.cli:main"
+
+[tool.setuptools]
+packages = ["orbita"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"

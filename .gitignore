@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+var/
+.env
+*.egg-info/
+.sites-runtime/
+.hypothesis/
+*.tsbuildinfo

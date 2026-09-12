@@ -1,0 +1,22 @@
+services:
+  app:
+    environment:
+      ORBITA_SECURE_COOKIE: "1"
+  proxy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ORBITA_DOMAIN: ${ORBITA_DOMAIN:?Set ORBITA_DOMAIN to the server hostname}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+volumes:
+  caddy-data:
+  caddy-config:

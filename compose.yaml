@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:${ORBITA_PORT:-8000}:8000"
+    volumes:
+      - orbita-data:/data
+    environment:
+      ORBITA_DATA_DIR: /data
+      ORBITA_MAX_WORK: ${ORBITA_MAX_WORK:-100000000}
+      ORBITA_SECURE_COOKIE: ${ORBITA_SECURE_COOKIE:-0}
+    restart: unless-stopped
+    stop_grace_period: 30s
+volumes:
+  orbita-data:
