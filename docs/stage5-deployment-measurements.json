@@ -1,0 +1,24 @@
+{
+  "version": "0.5.0",
+  "environment": "Local Docker Desktop; existing 0.2 data migrated; real HTTP and process workers",
+  "experiments": [
+    {
+      "kind": "n_minus_one",
+      "wall_s": 40.265,
+      "summary": {
+        "case_count": 48,
+        "critical_count": 48,
+        "sample_count": 720
+      }
+    },
+    {
+      "kind": "recommendations",
+      "wall_s": 6.125,
+      "summary": {
+        "case_count": 3,
+        "improvement_count": 3,
+        "sample_count": 720
+      }
+    }
+  ]
+}

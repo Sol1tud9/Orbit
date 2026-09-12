@@ -21,6 +21,16 @@ from .scenario import (
     validate_scenario,
 )
 from .storage import Store
+from .comparison import compare_results
+from .resilience import recommendation_candidates, snapshot_diagnostics
+from pydantic import BaseModel
+from typing import Literal
+
+
+class ExperimentRequest(BaseModel):
+    run_id: str
+    kind: Literal["n_minus_one", "recommendations"]
+
 
 MAX_UPLOAD = 10 * 1024 * 1024
 
@@ -88,6 +98,33 @@ def create_app(
             raise HTTPException(409, "Расчёт ещё не завершён")
         return run
 
+    def parent_revision(request):
+        revision_id = request.headers.get("X-Orbita-Parent-Revision")
+        if (
+            revision_id
+            and app.state.store.revision(revision_id, request.state.owner) is None
+        ):
+            raise HTTPException(404, "Исходная ревизия не найдена")
+        return revision_id
+
+    @app.get("/api/revisions")
+    def revisions(request: Request):
+        return app.state.store.revisions(request.state.owner)
+
+    @app.get("/api/revisions/{revision_id}")
+    def revision(revision_id: str, request: Request):
+        value = app.state.store.revision(revision_id, request.state.owner)
+        if value is None:
+            raise HTTPException(404, "Ревизия не найдена")
+        return value
+
+    @app.post("/api/revisions", status_code=201)
+    async def save_revision(request: Request):
+        scenario = await read_scenario(request)
+        return app.state.store.save_revision(
+            request.state.owner, scenario, parent_revision(request)
+        )
+
     @app.get("/api/health")
     def health():
         return {
@@ -146,7 +183,9 @@ def create_app(
                 "Сценарий корректен, но превышает ресурсный бюджет сервера. Уменьшите объём или увеличьте бюджет ORBITA_MAX_WORK при развёртывании.",
             )
         try:
-            run = app.state.store.create(request.state.owner, scenario)
+            run = app.state.store.create(
+                request.state.owner, scenario, parent_revision=parent_revision(request)
+            )
         except OverflowError as exc:
             raise HTTPException(429, str(exc)) from exc
         try:
@@ -175,6 +214,8 @@ def create_app(
     @app.get("/api/runs/{run_id}/snapshot/{index}")
     def get_snapshot(run_id: str, index: int, request: Request):
         run = owned_run(request, run_id, completed=True)
+        if run["kind"] != "simulation":
+            raise HTTPException(422, "Нужен расчёт сценария")
         scenario = run["effective_scenario"]
         if not 0 <= index < run["total"]:
             raise HTTPException(422, "Индекс отсчёта вне расчётной сетки")
@@ -217,7 +258,9 @@ def create_app(
 
     @app.get("/api/runs/{run_id}/export")
     def export(run_id: str, request: Request):
-        owned_run(request, run_id, completed=True)
+        run = owned_run(request, run_id, completed=True)
+        if run["kind"] != "simulation":
+            raise HTTPException(409, "Для эксперимента используйте экспорт отчёта")
         data = export_result(app.state.store.result(run_id))
         return Response(
             json.dumps(data, ensure_ascii=False, allow_nan=False),
@@ -237,6 +280,101 @@ def create_app(
             media_type="application/json",
             headers={
                 "Content-Disposition": f'attachment; filename="orbita-scenario-{run_id[:8]}.json"'
+            },
+        )
+
+    @app.get("/api/compare")
+    def compare(a: str, b: str, request: Request):
+        for run_id in (a, b):
+            if owned_run(request, run_id, completed=True)["kind"] != "simulation":
+                raise HTTPException(422, "Сравниваются только расчёты сценариев")
+        return compare_results(app.state.store.result(a), app.state.store.result(b))
+
+    @app.get("/api/runs/{run_id}/diagnostics/{index}")
+    def diagnostics(run_id: str, index: int, client: str, request: Request):
+        run = owned_run(request, run_id, completed=True)
+        scenario = run["effective_scenario"]
+        if (
+            run["kind"] != "simulation"
+            or not 0 <= index < run["total"]
+            or client
+            not in {g["id"] for g in scenario["ground_sites"] if g["role"] == "client"}
+        ):
+            raise HTTPException(422, "Некорректный отсчёт или клиент")
+        return snapshot_diagnostics(
+            scenario, index * scenario["environment"]["step_s"], client
+        )
+
+    @app.get("/api/experiments")
+    def experiments(request: Request):
+        rows = app.state.store.list(
+            request.state.owner, "n_minus_one"
+        ) + app.state.store.list(request.state.owner, "recommendations")
+        return sorted(rows, key=lambda r: r["created_at"], reverse=True)
+
+    @app.post("/api/experiments", status_code=202)
+    def experiment(payload: ExperimentRequest, request: Request):
+        baseline = owned_run(request, payload.run_id, completed=True)
+        if baseline["kind"] != "simulation":
+            raise HTTPException(422, "Нужен базовый расчёт сценария")
+        scenario = baseline["effective_scenario"]
+        count = baseline["total"]
+        satellites = len(scenario["design"]["satellites"])
+        clients = sum(g["role"] == "client" for g in scenario["ground_sites"])
+        cases = (
+            sum(
+                s["launch_batch"] <= scenario["design"]["launch_stage"]
+                for s in scenario["design"]["satellites"]
+            )
+            if payload.kind == "n_minus_one"
+            else len(recommendation_candidates(scenario))
+        )
+        work = (
+            count
+            * max(1, cases)
+            * (satellites**2 + satellites * len(scenario["ground_sites"]))
+        )
+        if (
+            work > int(os.getenv("ORBITA_MAX_EXPERIMENT_WORK", "200000000"))
+            or count * cases * clients > 250000
+        ):
+            raise HTTPException(
+                422,
+                "Эксперимент превышает бюджет сервера. Уменьшите состав или число отсчётов.",
+            )
+        try:
+            run = app.state.store.create(
+                request.state.owner,
+                scenario,
+                parent_revision=baseline["revision_id"],
+                kind=payload.kind,
+                parent_run_id=payload.run_id,
+                total_override=count * max(1, cases),
+            )
+        except OverflowError as exc:
+            raise HTTPException(429, str(exc)) from exc
+        try:
+            app.state.jobs.submit(run["id"], scenario, payload.kind, payload.run_id)
+        except Exception:
+            app.state.store.fail(run["id"], "Не удалось запустить эксперимент")
+            raise HTTPException(503, "Расчётный процесс недоступен")
+        return run
+
+    @app.get("/api/experiments/{run_id}/report")
+    def experiment_report(run_id: str, request: Request):
+        run = owned_run(request, run_id, completed=True)
+        if run["kind"] == "simulation":
+            raise HTTPException(422, "Нужен эксперимент")
+        data = {
+            **app.state.store.result(run_id),
+            "run_id": run_id,
+            "baseline_run_id": run["parent_run_id"],
+        }
+        return Response(
+            json.dumps(data, ensure_ascii=False, allow_nan=False),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="orbita-experiment-{run_id[:8]}.json"'
             },
         )
 

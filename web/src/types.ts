@@ -86,6 +86,8 @@ export type Summary = {
   all_clients_target_met: boolean;
 };
 export type Run = {
+  kind?: string;
+  parent_run_id?: string | null;
   id: string;
   revision_id: string;
   status:
@@ -156,3 +158,27 @@ export type Snapshot = {
   network: Network;
 };
 export type Issue = { path: string; message: string; code?: string };
+
+export type Revision = {
+  id: string;
+  title: string;
+  parent_id: string | null;
+  scenario_hash: string;
+  created_at: string;
+  scenario?: Scenario;
+};
+export type Comparison = {
+  compatible: boolean;
+  issues: string[];
+  diff: { path: string; before: unknown; after: unknown }[];
+  clients: {
+    client_id: string;
+    a: ClientSummary;
+    b: ClientSummary;
+    availability_delta: number;
+    max_outage_delta_s: number;
+    gained_samples: number;
+    lost_samples: number;
+    transitions: string[];
+  }[];
+};

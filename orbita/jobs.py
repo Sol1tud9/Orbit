@@ -5,17 +5,31 @@ from threading import Lock
 
 from .engine import CalculationCancelled, simulate
 from .storage import Store
+from .resilience import n_minus_one, recommendations
 
 logger = logging.getLogger(__name__)
 
 
-def perform_run(directory: str, run_id: str, scenario: dict):
+def perform_run(
+    directory: str, run_id: str, scenario: dict, kind="simulation", parent_run_id=None
+):
     store = Store(directory)
     if not store.start(run_id):
         return
     try:
-        result = simulate(
+        calculate = (
+            simulate
+            if kind == "simulation"
+            else n_minus_one
+            if kind == "n_minus_one"
+            else recommendations
+        )
+        arguments = (
+            {} if kind == "simulation" else {"baseline": store.result(parent_run_id)}
+        )
+        result = calculate(
             scenario,
+            **arguments,
             progress=lambda done, total: store.progress(run_id, done),
             cancelled=lambda: store.is_cancelled(run_id),
         )
@@ -42,9 +56,14 @@ class JobManager:
         self.futures = {}
         self.lock = Lock()
 
-    def submit(self, run_id, scenario):
+    def submit(self, run_id, scenario, kind="simulation", parent_run_id=None):
         future = self.pool.submit(
-            perform_run, str(self.store.directory), run_id, scenario
+            perform_run,
+            str(self.store.directory),
+            run_id,
+            scenario,
+            kind,
+            parent_run_id,
         )
         with self.lock:
             self.futures[run_id] = future

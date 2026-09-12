@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { RunResult, Scenario } from "./types";
 import { percent, reasonColor, time } from "./format";
+import { useState } from "react";
 
 type Props = {
   result: RunResult;
@@ -30,9 +31,15 @@ export default function Timeline({
   onClient,
   onPlaying,
 }: Props) {
+  const [zoom, setZoom] = useState(1);
   const count = result.summary.sample_count,
     step = scenario.environment.step_s,
     horizon = scenario.environment.horizon_s;
+  const windowCount = Math.max(1, Math.ceil(count / zoom));
+  const start = Math.min(
+    Math.floor(index / windowCount) * windowCount,
+    Math.max(0, count - windowCount),
+  );
   const move = (i: number) => onIndex(Math.max(0, Math.min(count - 1, i)));
   const nextOutage = (direction: 1 | -1) => {
     const intervals = result.summary.clients[client]?.outages ?? [];
@@ -48,9 +55,20 @@ export default function Timeline({
       aria-label="Временная шкала доступности"
     >
       <div className="timeline-head">
+        <label className="zoom-control">
+          Масштаб времени
+          <select
+            aria-label="Масштаб времени"
+            value={zoom}
+            onChange={(e) => setZoom(Number(e.target.value))}
+          >
+            <option value="1">Весь горизонт</option>
+            <option value="4">×4</option>
+            <option value="12">×12</option>
+          </select>
+        </label>
         <div>
-          <span className="eyebrow">СОСТОЯНИЕ СЕТИ ВО ВРЕМЕНИ</span>
-          <h2>Доступность связи</h2>
+          <h2>Связь во времени</h2>
         </div>
         <div className="playback">
           <button
@@ -106,7 +124,9 @@ export default function Timeline({
         <span>Клиент</span>
         <div>
           {Array.from({ length: 7 }, (_, i) => (
-            <span key={i}>{time((horizon * i) / 6).slice(0, 5)}</span>
+            <span key={i}>
+              {time((start + (windowCount * i) / 6) * step).slice(0, 5)}
+            </span>
           ))}
         </div>
         <span>За период</span>
@@ -136,14 +156,15 @@ export default function Timeline({
                 const bounds = e.currentTarget.getBoundingClientRect();
                 onClient(id);
                 move(
-                  Math.floor(
-                    ((e.clientX - bounds.left) / bounds.width) * count,
-                  ),
+                  start +
+                    Math.floor(
+                      ((e.clientX - bounds.left) / bounds.width) * windowCount,
+                    ),
                 );
               }}
             >
               <svg
-                viewBox={`0 0 ${count} 24`}
+                viewBox={`${start} 0 ${windowCount} 24`}
                 preserveAspectRatio="none"
                 role="img"
                 aria-label={`Доступность ${id} за весь период`}
@@ -163,17 +184,26 @@ export default function Timeline({
               </svg>
               <span
                 className="time-cursor"
-                style={{ left: `${((index + 0.5) / count) * 100}%` }}
+                style={{
+                  left: `${((index - start + 0.5) / windowCount) * 100}%`,
+                }}
               />
               {[...scenario.failures, ...scenario.gateway_outages]
                 .flatMap((o) => [o.start_s, o.end_s])
-                .filter((t, i, a) => t < horizon && a.indexOf(t) === i)
+                .filter(
+                  (t, i, a) =>
+                    t >= start * step &&
+                    t < (start + windowCount) * step &&
+                    a.indexOf(t) === i,
+                )
                 .map((t) => (
                   <span
                     key={t}
                     className="failure-marker"
                     title={`Граница периода недоступности: ${time(t)}`}
-                    style={{ left: `${(t / horizon) * 100}%` }}
+                    style={{
+                      left: `${((t / step - start) / windowCount) * 100}%`,
+                    }}
                   />
                 ))}
             </div>

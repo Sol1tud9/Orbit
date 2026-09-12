@@ -36,8 +36,19 @@ class Store:
                     finished_at TEXT, error TEXT, summary TEXT
                 );
                 CREATE INDEX IF NOT EXISTS runs_owner_created ON runs(owner, created_at);
-                PRAGMA user_version=1;
             """)
+            revision_columns = {
+                r[1] for r in db.execute("PRAGMA table_info(revisions)")
+            }
+            run_columns = {r[1] for r in db.execute("PRAGMA table_info(runs)")}
+            if "parent_id" not in revision_columns:
+                db.execute("ALTER TABLE revisions ADD COLUMN parent_id TEXT")
+            if "kind" not in run_columns:
+                db.execute(
+                    "ALTER TABLE runs ADD COLUMN kind TEXT NOT NULL DEFAULT 'simulation'"
+                )
+                db.execute("ALTER TABLE runs ADD COLUMN parent_run_id TEXT")
+            db.execute("PRAGMA user_version=2")
 
     @contextmanager
     def connect(self):
@@ -58,13 +69,23 @@ class Store:
             )
 
     def create(
-        self, owner: str, scenario: dict, max_owner_pending=3, max_pending=16
+        self,
+        owner: str,
+        scenario: dict,
+        max_owner_pending=3,
+        max_pending=16,
+        parent_revision=None,
+        kind="simulation",
+        parent_run_id=None,
+        total_override=None,
     ) -> dict:
         revision_id, run_id = uuid.uuid4().hex, uuid.uuid4().hex
         timestamp = now()
         total = (
             scenario["environment"]["horizon_s"] // scenario["environment"]["step_s"]
         )
+        if total_override is not None:
+            total = total_override
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             pending = db.execute(
@@ -78,7 +99,7 @@ class Store:
                     "Очередь расчётов заполнена. Дождитесь завершения или отмените задание."
                 )
             db.execute(
-                "INSERT INTO revisions VALUES (?,?,?,?,?,?)",
+                "INSERT INTO revisions (id,owner,title,scenario,scenario_hash,created_at,parent_id) VALUES (?,?,?,?,?,?,?)",
                 (
                     revision_id,
                     owner,
@@ -86,11 +107,12 @@ class Store:
                     json.dumps(scenario, ensure_ascii=False, allow_nan=False),
                     canonical_hash(scenario),
                     timestamp,
+                    parent_revision,
                 ),
             )
             db.execute(
-                "INSERT INTO runs (id,owner,revision_id,status,total,created_at) VALUES (?,?,?,'queued',?,?)",
-                (run_id, owner, revision_id, total, timestamp),
+                "INSERT INTO runs (id,owner,revision_id,status,total,created_at,kind,parent_run_id) VALUES (?,?,?,'queued',?,?,?,?)",
+                (run_id, owner, revision_id, total, timestamp, kind, parent_run_id),
             )
         return self.get(run_id, owner)
 
@@ -116,13 +138,52 @@ class Store:
             ).fetchone()
         return self.public_row(row)
 
-    def list(self, owner):
+    def list(self, owner, kind="simulation"):
         with self.connect() as db:
             rows = db.execute(
-                "SELECT runs.*, revisions.title, revisions.scenario_hash FROM runs JOIN revisions ON revisions.id=runs.revision_id WHERE runs.owner=? ORDER BY runs.created_at DESC LIMIT 100",
-                (owner,),
+                "SELECT runs.*, revisions.title, revisions.scenario_hash FROM runs JOIN revisions ON revisions.id=runs.revision_id WHERE runs.owner=? AND runs.kind=? ORDER BY runs.created_at DESC LIMIT 100",
+                (owner, kind),
             ).fetchall()
         return [self.public_row(row) for row in rows]
+
+    def revision(self, revision_id, owner):
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT * FROM revisions WHERE id=? AND owner=?", (revision_id, owner)
+            ).fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        result.pop("owner")
+        result["scenario"] = json.loads(result["scenario"])
+        return result
+
+    def revisions(self, owner):
+        with self.connect() as db:
+            return [
+                dict(r)
+                for r in db.execute(
+                    "SELECT id,title,scenario_hash,created_at,parent_id FROM revisions WHERE owner=? ORDER BY created_at DESC LIMIT 200",
+                    (owner,),
+                ).fetchall()
+            ]
+
+    def save_revision(self, owner, scenario, parent_id=None):
+        revision_id = uuid.uuid4().hex
+        with self.connect() as db:
+            db.execute(
+                "INSERT INTO revisions (id,owner,title,scenario,scenario_hash,created_at,parent_id) VALUES (?,?,?,?,?,?,?)",
+                (
+                    revision_id,
+                    owner,
+                    scenario["meta"]["title"],
+                    json.dumps(scenario, ensure_ascii=False, allow_nan=False),
+                    canonical_hash(scenario),
+                    now(),
+                    parent_id,
+                ),
+            )
+        return self.revision(revision_id, owner)
 
     def start(self, run_id):
         with self.connect() as db:

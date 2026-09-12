@@ -1,5 +1,14 @@
 import type { Reason } from "./types";
 
+export const savedAt = (value: string) =>
+  new Date(value).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
 export const percent = (value: number) =>
   new Intl.NumberFormat("ru-RU", {
     minimumFractionDigits: 2,

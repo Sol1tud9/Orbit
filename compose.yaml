@@ -8,6 +8,7 @@ services:
     environment:
       ORBITA_DATA_DIR: /data
       ORBITA_MAX_WORK: ${ORBITA_MAX_WORK:-100000000}
+      ORBITA_MAX_EXPERIMENT_WORK: ${ORBITA_MAX_EXPERIMENT_WORK:-200000000}
       ORBITA_SECURE_COOKIE: ${ORBITA_SECURE_COOKIE:-0}
     restart: unless-stopped
     stop_grace_period: 30s

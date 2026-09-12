@@ -33,6 +33,10 @@ import {
 } from "./format";
 import NetworkView from "./NetworkView";
 import Timeline from "./Timeline";
+import ScenarioEditor from "./ScenarioEditor";
+import ComparisonView from "./ComparisonView";
+import ResilienceView from "./ResilienceView";
+import SnapshotDetails from "./SnapshotDetails";
 import { useAnalysisTool } from "./webmcp";
 import type { Run, RunResult, Scenario, Snapshot } from "./types";
 
@@ -49,6 +53,11 @@ const statusText: Record<Run["status"], string> = {
 
 export default function App() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [mode, setMode] = useState<
+    "research" | "design" | "compare" | "resilience"
+  >("research");
+  const [parentRevision, setParentRevision] = useState<string | null>(null);
+  const [editorScenario, setEditorScenario] = useState<Scenario | null>(null);
   const [draft, setDraft] = useState<Scenario | null>(null);
   const [catalogFile, setCatalogFile] = useState("");
   const [runId, setRunId] = useState<string | null>(null);
@@ -231,6 +240,7 @@ export default function App() {
   }, [detailsOpen]);
 
   const selectScenario = (scenario: Scenario, file = "") => {
+    setParentRevision(null);
     setRunId(null);
     setRun(null);
     setResult(null);
@@ -249,7 +259,16 @@ export default function App() {
     setSubmitting(true);
     setError(null);
     try {
-      const created = await post<Run>("/runs", draft);
+      const created = await request<Run>("/runs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(parentRevision
+            ? { "X-Orbita-Parent-Revision": parentRevision }
+            : {}),
+        },
+        body: JSON.stringify(draft),
+      });
       setRunId(created.id);
       setHistory((h) => [created, ...h]);
     } catch (e) {
@@ -293,6 +312,22 @@ export default function App() {
   };
 
   const scenario = result?.effective_scenario ?? draft;
+  const editVariant = (value: Scenario, parent: string) => {
+    setEditorScenario(structuredClone(value));
+    setParentRevision(parent);
+    setMode("design");
+  };
+  const createFailure = (id: string) => {
+    if (!scenario || !run) return;
+    const next = structuredClone(scenario);
+    next.meta.title += ` · отказ ${id}`;
+    next.failures.push({
+      satellite_id: id,
+      start_s: index * scenario.environment.step_s,
+      end_s: scenario.environment.horizon_s,
+    });
+    editVariant(next, run.revision_id);
+  };
   const running =
     submitting ||
     (!!run && ["queued", "running", "cancelling"].includes(run.status));
@@ -314,19 +349,9 @@ export default function App() {
           <span className="brand-mark">
             <Orbit size={29} strokeWidth={1.5} />
           </span>
-          <span>
-            ОРБИТА<small>ЛАБОРАТОРИЯ УСТОЙЧИВОСТИ</small>
-          </span>
+          <span>Орбита</span>
         </a>
-        <div className="header-context">
-          <span className="header-rule" />
-          <span>Проектирование спутниковой сети</span>
-        </div>
         <div className="header-actions">
-          <span className="model-badge">
-            <ShieldCheck size={15} />
-            cosmo-A-1.0
-          </span>
           <button
             className={`quiet ${historyOpen ? "active" : ""}`}
             onClick={openHistory}
@@ -341,758 +366,839 @@ export default function App() {
       <main>
         <div className="workspace-heading">
           <div>
-            <div className="eyebrow">ИНЖЕНЕРНАЯ РАБОЧАЯ ОБЛАСТЬ</div>
             <h1>
-              Исследование группировки<span className="title-dot">.</span>
+              {
+                {
+                  research: "Спутниковая сеть",
+                  design: "Проектирование",
+                  compare: "Сравнение вариантов",
+                  resilience: "Устойчивость сети",
+                }[mode]
+              }
             </h1>
-          </div>
-          <div className="workspace-meta">
-            <span>КосмоХакатон 2026</span>
-            <span>Геометрическая модель связи</span>
           </div>
         </div>
 
-        <section className="scenario-bar" aria-label="Выбор и запуск сценария">
-          <div className="scenario-select">
-            <span className="scenario-icon">
-              <Satellite size={21} />
-            </span>
-            <div>
-              <label htmlFor="scenario">Сценарий группировки</label>
-              <div className="select-wrap">
-                <select
-                  id="scenario"
-                  aria-label="Сценарий группировки"
-                  value={catalogFile}
-                  disabled={initializing || uploading}
-                  onChange={(e) => {
-                    const item = catalog.find((x) => x.file === e.target.value);
-                    if (item) selectScenario(item.scenario, item.file);
-                  }}
-                >
-                  {!catalogFile && (
-                    <option value="">
-                      {draft?.meta.title ?? "Загрузка сценариев…"}
-                    </option>
-                  )}
-                  {catalog.map((item) => (
-                    <option key={item.file} value={item.file}>
-                      {item.title}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={15} />
+        <nav className="workspace-modes" aria-label="Режим работы">
+          {(
+            [
+              ["research", "Исследование"],
+              ["design", "Проектирование"],
+              ["compare", "Сравнение A/B"],
+              ["resilience", "Устойчивость"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              aria-pressed={mode === key}
+              className={mode === key ? "active" : ""}
+              onClick={() => {
+                setPlaying(false);
+                if (key === "design") {
+                  setEditorScenario(
+                    scenario ? structuredClone(scenario) : null,
+                  );
+                  setParentRevision(run?.revision_id ?? parentRevision);
+                }
+                setMode(key);
+              }}
+            >
+              {key === "research" ? (
+                <Orbit size={19} />
+              ) : key === "design" ? (
+                <SlidersHorizontal size={19} />
+              ) : key === "compare" ? (
+                <RouteIcon size={19} />
+              ) : (
+                <ShieldCheck size={19} />
+              )}
+              <span>{label}</span>
+            </button>
+          ))}
+        </nav>
+        {editorScenario && (
+          <div hidden={mode !== "design"}>
+            <ScenarioEditor
+              key={JSON.stringify(editorScenario)}
+              scenario={editorScenario}
+              parentId={parentRevision}
+              onApply={(value, id) => {
+                selectScenario(value);
+                setParentRevision(id);
+                setMode("research");
+              }}
+            />
+          </div>
+        )}
+        {mode === "compare" && (
+          <ComparisonView
+            runs={history}
+            currentId={runId}
+            onVariant={editVariant}
+          />
+        )}
+        {mode === "resilience" && (
+          <ResilienceView run={run} result={result} onVariant={editVariant} />
+        )}
+        <div hidden={mode !== "research"}>
+          <section
+            className="scenario-bar"
+            aria-label="Выбор и запуск сценария"
+          >
+            <div className="scenario-select">
+              <span className="scenario-icon">
+                <Satellite size={21} />
+              </span>
+              <div>
+                <label htmlFor="scenario">Сценарий группировки</label>
+                <div className="select-wrap">
+                  <select
+                    id="scenario"
+                    aria-label="Сценарий группировки"
+                    value={catalogFile}
+                    disabled={initializing || uploading}
+                    onChange={(e) => {
+                      const item = catalog.find(
+                        (x) => x.file === e.target.value,
+                      );
+                      if (item) {
+                        selectScenario(item.scenario, item.file);
+                        setParentRevision(null);
+                      }
+                    }}
+                  >
+                    {!catalogFile && (
+                      <option value="">
+                        {draft?.meta.title ?? "Загрузка сценариев…"}
+                      </option>
+                    )}
+                    {catalog.map((item) => (
+                      <option key={item.file} value={item.file}>
+                        {item.title}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={15} />
+                </div>
               </div>
             </div>
-          </div>
-          <div className="scenario-facts">
-            <span>
-              <strong>{scenario?.design.satellites.length ?? "—"}</strong>{" "}
-              аппаратов
-            </span>
-            <span>
-              <strong>{scenario?.design.planes.length ?? "—"}</strong> плоскости
-            </span>
-            <span>
-              Очередь{" "}
-              <strong>{scenario?.design.launch_stage ?? "—"} / 3</strong>
-            </span>
-            <button
-              className="icon-button"
-              aria-label="Параметры сценария"
-              disabled={!scenario}
-              onClick={() => setDetailsOpen(true)}
-            >
-              <SlidersHorizontal size={17} />
-            </button>
-          </div>
-          <div className="scenario-actions">
-            <input
-              ref={fileInput}
-              type="file"
-              accept=".json,application/json"
-              className="visually-hidden"
-              aria-label="Загрузить JSON-сценарий"
-              onChange={(e) => upload(e.target.files?.[0])}
-            />
-            <button
-              className="secondary"
-              disabled={uploading}
-              onClick={() => fileInput.current?.click()}
-            >
-              {uploading ? (
-                <LoaderCircle size={16} className="spin" />
-              ) : (
-                <Upload size={16} />
-              )}
-              Загрузить JSON
-            </button>
-            <button
-              className="primary"
-              onClick={startRun}
-              disabled={!draft || running || uploading}
-            >
-              {running ? (
-                <LoaderCircle className="spin" size={16} />
-              ) : (
-                <Play size={15} fill="currentColor" />
-              )}
-              {running
-                ? "Вычисляем…"
-                : result
-                  ? "Повторить расчёт"
-                  : "Рассчитать"}
-            </button>
-          </div>
-        </section>
-
-        {error && (
-          <section className="error-panel" role="alert">
-            <AlertTriangle size={20} />
-            <div>
-              <strong>
-                {error.issues.length
-                  ? "Проверьте данные сценария"
-                  : error.message}
-              </strong>
-              {error.issues.length > 0 && (
-                <ul>
-                  {error.issues.slice(0, 30).map((issue, i) => (
-                    <li key={i}>
-                      <code>{issue.path}</code> — {issue.message}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <button
-              className="icon-button"
-              aria-label="Закрыть сообщение"
-              onClick={() => setError(null)}
-            >
-              <X size={18} />
-            </button>
-          </section>
-        )}
-
-        {historyOpen && (
-          <section className="history-panel">
-            <div className="section-title">
-              <h2>Сохранённые расчёты</h2>
+            <div className="scenario-facts">
+              <span>
+                <strong>{scenario?.design.satellites.length ?? "—"}</strong>{" "}
+                аппаратов
+              </span>
+              <span>
+                <strong>{scenario?.design.planes.length ?? "—"}</strong>{" "}
+                плоскости
+              </span>
+              <span>
+                Очередь{" "}
+                <strong>{scenario?.design.launch_stage ?? "—"} / 3</strong>
+              </span>
               <button
                 className="icon-button"
-                aria-label="Закрыть расчёты"
-                onClick={() => setHistoryOpen(false)}
+                aria-label="Параметры сценария"
+                disabled={!scenario}
+                onClick={() => setDetailsOpen(true)}
+              >
+                <SlidersHorizontal size={17} />
+              </button>
+            </div>
+            <div className="scenario-actions">
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".json,application/json"
+                className="visually-hidden"
+                aria-label="Загрузить JSON-сценарий"
+                onChange={(e) => upload(e.target.files?.[0])}
+              />
+              <button
+                className="secondary"
+                disabled={uploading}
+                onClick={() => fileInput.current?.click()}
+              >
+                {uploading ? (
+                  <LoaderCircle size={16} className="spin" />
+                ) : (
+                  <Upload size={16} />
+                )}
+                Загрузить JSON
+              </button>
+              <button
+                className="primary"
+                onClick={startRun}
+                disabled={!draft || running || uploading}
+              >
+                {running ? (
+                  <LoaderCircle className="spin" size={16} />
+                ) : (
+                  <Play size={15} fill="currentColor" />
+                )}
+                {running
+                  ? "Вычисляем…"
+                  : result
+                    ? "Повторить расчёт"
+                    : "Рассчитать"}
+              </button>
+            </div>
+          </section>
+
+          {error && (
+            <section className="error-panel" role="alert">
+              <AlertTriangle size={20} />
+              <div>
+                <strong>
+                  {error.issues.length
+                    ? "Проверьте данные сценария"
+                    : error.message}
+                </strong>
+                {error.issues.length > 0 && (
+                  <ul>
+                    {error.issues.slice(0, 30).map((issue, i) => (
+                      <li key={i}>
+                        <code>{issue.path}</code> — {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <button
+                className="icon-button"
+                aria-label="Закрыть сообщение"
+                onClick={() => setError(null)}
               >
                 <X size={18} />
               </button>
-            </div>
-            {history.length ? (
-              <div className="history-list">
-                {history.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setError(null);
-                      setCatalogFile("");
-                      setRunId(item.id);
-                      setHistoryOpen(false);
-                    }}
-                    className={item.id === runId ? "selected" : ""}
-                  >
-                    <div>
-                      <strong>{item.title}</strong>
-                      <span>
-                        {new Date(item.created_at).toLocaleString("ru-RU")} ·{" "}
-                        {item.id.slice(0, 8)}
-                      </span>
-                    </div>
-                    <span
-                      className={
-                        item.status === "completed" ? "text-green" : "muted"
-                      }
-                    >
-                      {statusText[item.status]}
-                    </span>
-                    <ArrowRight size={16} />
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="muted">
-                Завершённые расчёты появятся здесь. Их параметры и результаты
-                сохраняются автоматически.
-              </p>
-            )}
-          </section>
-        )}
-
-        {running && run && (
-          <div className="job-progress" role="status">
-            <LoaderCircle size={17} className="spin" />
-            <span>
-              {run.status === "queued"
-                ? "Подготавливаем расчёт"
-                : `Рассчитано ${run.progress} из ${run.total} состояний`}
-            </span>
-            <progress max={run.total} value={run.progress} />
-            <button
-              className="quiet"
-              disabled={run.status === "cancelling"}
-              onClick={async () => {
-                try {
-                  setRun(await post<Run>(`/runs/${run.id}/cancel`));
-                } catch (e) {
-                  fail(e);
-                }
-              }}
-            >
-              {run.status === "cancelling" ? "Отменяем…" : "Отменить"}
-            </button>
-          </div>
-        )}
-        {run &&
-          !running &&
-          ["cancelled", "interrupted", "failed"].includes(run.status) && (
-            <div className="notice">
-              <Info size={17} />
-              Расчёт {statusText[run.status].toLowerCase()}. Можно запустить его
-              повторно.
-            </div>
+            </section>
           )}
 
-        {scenario && (
-          <>
-            <div className="metrics-row">
-              <div className="metric-card client-metric">
-                <span className="metric-label">
-                  <Target size={15} />
-                  Выбранный клиент
-                </span>
-                <select
-                  aria-label="Клиентский пункт"
-                  value={client}
-                  onChange={(e) => {
-                    setClient(e.target.value);
-                    setSelected(e.target.value);
-                  }}
+          {historyOpen && (
+            <section className="history-panel">
+              <div className="section-title">
+                <h2>Сохранённые расчёты</h2>
+                <button
+                  className="icon-button"
+                  aria-label="Закрыть расчёты"
+                  onClick={() => setHistoryOpen(false)}
                 >
-                  {scenario.ground_sites
-                    .filter((g) => g.role === "client")
-                    .map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.id}
-                      </option>
-                    ))}
-                </select>
-                <span className="metric-note">
-                  {ground ? `${ground.lat_deg}° · ${ground.lon_deg}°` : "—"}
-                </span>
+                  <X size={18} />
+                </button>
               </div>
-              <div className="metric-card">
-                <span className="metric-label">
-                  <Radio size={15} />
-                  Геометрическое покрытие
-                </span>
-                <strong>
-                  {metric ? percent(metric.coverage) : "—"}
-                  <small>{metric ? "%" : ""}</small>
-                </strong>
-                <span className="metric-note">
-                  Виден хотя бы один активный аппарат
-                </span>
-              </div>
-              <div
-                className={`metric-card availability ${metric?.target_met ? "achieved" : ""}`}
-              >
-                <span className="metric-label">
-                  <RouteIcon size={15} />
-                  Сквозная доступность
-                </span>
-                <strong>
-                  {metric ? percent(metric.availability) : "—"}
-                  <small>{metric ? "%" : ""}</small>
-                </strong>
-                <span className="metric-note">
-                  {metric ? (
-                    <>
+              {history.length ? (
+                <div className="history-list">
+                  {history.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setError(null);
+                        setCatalogFile("");
+                        setRunId(item.id);
+                        setHistoryOpen(false);
+                      }}
+                      className={item.id === runId ? "selected" : ""}
+                    >
+                      <div>
+                        <strong>{item.title}</strong>
+                        <span>
+                          {new Date(item.created_at).toLocaleString("ru-RU")}
+                        </span>
+                      </div>
                       <span
                         className={
-                          metric.target_met ? "text-green" : "text-amber"
+                          item.status === "completed" ? "text-green" : "muted"
                         }
                       >
-                        {metric.target_met ? "Цель достигнута" : "Ниже цели"}
-                      </span>{" "}
-                      ·{" "}
-                    </>
-                  ) : (
-                    ""
-                  )}
-                  Цель{" "}
-                  {number(scenario.environment.target_availability * 100, 2)}%
-                </span>
-              </div>
+                        {statusText[item.status]}
+                      </span>
+                      <ArrowRight size={16} />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">
+                  Завершённые расчёты появятся здесь. Их параметры и результаты
+                  сохраняются автоматически.
+                </p>
+              )}
+            </section>
+          )}
+
+          {running && run && (
+            <div className="job-progress" role="status">
+              <LoaderCircle size={17} className="spin" />
+              <span>
+                {run.status === "queued"
+                  ? "Подготавливаем расчёт"
+                  : `Рассчитано ${run.progress} из ${run.total} состояний`}
+              </span>
+              <progress max={run.total} value={run.progress} />
               <button
-                className="metric-card outage-metric"
-                disabled={!maxOutage}
-                onClick={() => {
-                  if (maxOutage) {
-                    setIndex(maxOutage.start_s / scenario.environment.step_s);
-                    setTab("outages");
-                    setPlaying(false);
+                className="quiet"
+                disabled={run.status === "cancelling"}
+                onClick={async () => {
+                  try {
+                    setRun(await post<Run>(`/runs/${run.id}/cancel`));
+                  } catch (e) {
+                    fail(e);
                   }
                 }}
               >
-                <span className="metric-label">
-                  <Clock3 size={15} />
-                  Максимальный перерыв
-                </span>
-                <strong>{metric ? duration(metric.max_outage_s) : "—"}</strong>
-                <span className="metric-note">
-                  {metric
-                    ? `${metric.outage_count} перерывов за период`
-                    : "Результат после расчёта"}
-                  {maxOutage && <ArrowRight size={14} />}
-                </span>
+                {run.status === "cancelling" ? "Отменяем…" : "Отменить"}
               </button>
             </div>
+          )}
+          {run &&
+            !running &&
+            ["cancelled", "interrupted", "failed"].includes(run.status) && (
+              <div className="notice">
+                <Info size={17} />
+                Расчёт {statusText[run.status].toLowerCase()}. Можно запустить
+                его повторно.
+              </div>
+            )}
 
-            <section className="workbench">
-              <div className="workbench-bar">
-                <div className="workbench-tabs">
-                  <button
-                    className={tab === "network" ? "selected" : ""}
-                    onClick={() => setTab("network")}
-                  >
-                    <Orbit size={17} />
-                    Сеть и маршрут
-                  </button>
-                  <button
-                    className={tab === "outages" ? "selected" : ""}
-                    onClick={() => setTab("outages")}
-                    disabled={!result}
-                  >
-                    <Activity size={17} />
-                    Перерывы{metric && <span>{metric.outage_count}</span>}
-                  </button>
-                </div>
-                <div className="current-time">
-                  <span>
-                    {snapshotBusy ? "Обновляем состояние" : "Время от начала"}
+          {scenario && (
+            <>
+              <div className="metrics-row">
+                <div className="metric-card client-metric">
+                  <span className="metric-label">
+                    <Target size={15} />
+                    Клиентский пункт
                   </span>
-                  <strong>{time(index * scenario.environment.step_s)}</strong>
-                  {snapshotBusy && <LoaderCircle size={13} className="spin" />}
+                  <select
+                    aria-label="Клиентский пункт"
+                    value={client}
+                    onChange={(e) => {
+                      setClient(e.target.value);
+                      setSelected(e.target.value);
+                    }}
+                  >
+                    {scenario.ground_sites
+                      .filter((g) => g.role === "client")
+                      .map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.id}
+                        </option>
+                      ))}
+                  </select>
+                  <span className="metric-note">
+                    {ground ? `${ground.lat_deg}° · ${ground.lon_deg}°` : "—"}
+                  </span>
                 </div>
-              </div>
-              <div className="workbench-body">
-                <div className="primary-surface">
-                  {tab === "network" ? (
-                    <NetworkView
-                      scenario={scenario}
-                      snapshot={snapshot}
-                      client={client}
-                      selected={selected}
-                      onSelect={selectNode}
-                      busy={snapshotBusy}
+                <div className="metric-card">
+                  <span className="metric-label">
+                    <Radio size={15} />
+                    Покрытие
+                  </span>
+                  <strong>
+                    {metric ? percent(metric.coverage) : "—"}
+                    <small>{metric ? "%" : ""}</small>
+                  </strong>
+                  <span className="metric-note">Есть видимый спутник</span>
+                  <span className="metric-gauge" aria-hidden="true">
+                    <i style={{ width: `${(metric?.coverage ?? 0) * 100}%` }} />
+                  </span>
+                </div>
+                <div
+                  className={`metric-card availability ${metric?.target_met ? "achieved" : ""}`}
+                >
+                  <span className="metric-label">
+                    <RouteIcon size={15} />
+                    Доступность связи
+                  </span>
+                  <strong>
+                    {metric ? percent(metric.availability) : "—"}
+                    <small>{metric ? "%" : ""}</small>
+                  </strong>
+                  <span className="metric-note">
+                    {metric ? (
+                      <>
+                        <span
+                          className={
+                            metric.target_met ? "text-green" : "text-amber"
+                          }
+                        >
+                          {metric.target_met ? "Цель достигнута" : "Ниже цели"}
+                        </span>{" "}
+                        ·{" "}
+                      </>
+                    ) : (
+                      ""
+                    )}
+                    Цель{" "}
+                    {number(scenario.environment.target_availability * 100, 2)}%
+                  </span>
+                  <span className="metric-gauge" aria-hidden="true">
+                    <i
+                      style={{ width: `${(metric?.availability ?? 0) * 100}%` }}
                     />
-                  ) : (
-                    <section className="outages-view">
-                      <div className="outages-heading">
-                        <div>
-                          <span className="eyebrow">
-                            {client} · ПЕРИОД{" "}
-                            {duration(scenario.environment.horizon_s)}
-                          </span>
-                          <h2>Интервалы без маршрута</h2>
-                        </div>
-                        <span className="muted">
-                          Всего {duration(metric?.total_outage_s ?? 0)}
-                        </span>
-                      </div>
-                      {metric?.outages.length ? (
-                        <div className="outages-table-wrap">
-                          <table>
-                            <thead>
-                              <tr>
-                                <th>Начало</th>
-                                <th>Конец</th>
-                                <th>Длительность</th>
-                                <th>Причина</th>
-                                <th />
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {metric.outages.map((o) => (
-                                <tr
-                                  key={o.start_s}
-                                  className={
-                                    index * scenario.environment.step_s >=
-                                      o.start_s &&
-                                    index * scenario.environment.step_s <
-                                      o.end_s
-                                      ? "current"
-                                      : ""
-                                  }
-                                >
-                                  <td>{time(o.start_s)}</td>
-                                  <td>{time(o.end_s)}</td>
-                                  <td>{duration(o.duration_s)}</td>
-                                  <td>
-                                    {Object.keys(o.reason_samples)
-                                      .map(
-                                        (r) =>
-                                          reasonText[
-                                            r as keyof typeof reasonText
-                                          ],
-                                      )
-                                      .join(" · ")}
-                                  </td>
-                                  <td>
-                                    <button
-                                      className="icon-button"
-                                      aria-label={`Показать перерыв ${time(o.start_s)}`}
-                                      onClick={() => {
-                                        setIndex(
-                                          o.start_s /
-                                            scenario.environment.step_s,
-                                        );
-                                        setTab("network");
-                                        setPlaying(false);
-                                      }}
-                                    >
-                                      <ArrowRight size={16} />
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <div className="empty-state">
-                          <Check size={28} />
-                          <h3>Связь без перерывов</h3>
-                          <p>На каждом отсчёте существует путь до шлюза.</p>
-                        </div>
-                      )}
-                    </section>
-                  )}
+                  </span>
                 </div>
-                <aside className="inspector" aria-label="Инспектор маршрута">
-                  <div className="inspector-heading">
-                    <span className="eyebrow">ВЫБРАННЫЙ МАРШРУТ</span>
-                    <strong>
-                      {client || "Клиент"}
-                      <ArrowRight size={16} />
-                      {sample?.gateway_id ?? "Gateway"}
-                    </strong>
-                  </div>
-                  {sample ? (
-                    <>
-                      <div
-                        className="route-status"
-                        style={
-                          {
-                            "--state-color": reasonColor[sample.reason],
-                          } as React.CSSProperties
-                        }
-                      >
-                        {sample.path.length ? (
-                          <Check size={17} />
-                        ) : (
-                          <AlertTriangle size={17} />
-                        )}
-                        <span>{reasonText[sample.reason]}</span>
-                      </div>
-                      <div className="route-numbers">
-                        <div>
-                          <strong>{sample.hop_count ?? "—"}</strong>
-                          <span>переходов</span>
-                        </div>
-                        <div>
-                          <strong>
-                            {sample.distance_km !== null
-                              ? number(sample.distance_km)
-                              : "—"}
-                          </strong>
-                          <span>км · длина пути</span>
-                        </div>
-                      </div>
-                      {sample.path.length > 0 ? (
-                        <div
-                          className="route-chain"
-                          aria-label="Последовательность узлов маршрута"
-                        >
-                          {sample.path.map((id, i) => (
-                            <div className="route-chain-item" key={id}>
-                              <span
-                                className={`route-node-symbol ${i === 0 || i === sample.path.length - 1 ? "ground" : ""}`}
-                              />
-                              <button
-                                onClick={() => selectNode(id)}
-                                className={id === selected ? "selected" : ""}
-                              >
-                                {id}
-                                <small>
-                                  {i === 0
-                                    ? "Клиентский пункт"
-                                    : i === sample.path.length - 1
-                                      ? "Наземный шлюз"
-                                      : scenario.design.satellites.find(
-                                          (s) => s.id === id,
-                                        )?.plane_id}
-                                </small>
-                              </button>
-                              {i < sample.path.length - 1 && (
-                                <span className="edge-distance">
-                                  {snapshot
-                                    ? number(
-                                        snapshot.edges.find(
-                                          ([a, b]) =>
-                                            (a === id &&
-                                              b === sample.path[i + 1]) ||
-                                            (b === id &&
-                                              a === sample.path[i + 1]),
-                                        )?.[2] ?? 0,
-                                      )
-                                    : "…"}{" "}
-                                  км
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="diagnosis">
-                          <p>
-                            {sample.reason === "no_client_coverage"
-                              ? "Из пункта не виден ни один активный аппарат выше порога возвышения."
-                              : sample.reason === "all_gateways_offline"
-                                ? "Клиент видит спутники, но все наземные шлюзы находятся в периодах недоступности."
-                                : sample.reason === "no_gateway_contact"
-                                  ? "Клиент видит спутники. Доступные шлюзы сейчас не имеют контакта со спутниковой сетью."
-                                  : "Клиент и доступные шлюзы имеют контакты, но их спутниковые компоненты не соединены."}
-                          </p>
-                          {snapshotRow?.facts && (
-                            <dl>
-                              <dt>Компоненты клиента</dt>
-                              <dd>
-                                {snapshotRow.facts.client_component_ids
-                                  .map((i) => i + 1)
-                                  .join(", ") || "—"}
-                              </dd>
-                              <dt>Компоненты шлюзов</dt>
-                              <dd>
-                                {snapshotRow.facts.gateway_component_ids
-                                  .map((i) => i + 1)
-                                  .join(", ") || "—"}
-                              </dd>
-                            </dl>
-                          )}
-                        </div>
-                      )}
-                      <div className="inspector-section">
-                        <span className="eyebrow">
-                          ВИДИМЫЕ АППАРАТЫ ·{" "}
-                          {sample.visible_satellite_ids.length}
-                        </span>
-                        <div className="chips">
-                          {sample.visible_satellite_ids.length ? (
-                            sample.visible_satellite_ids.map((id) => (
-                              <button
-                                key={id}
-                                onClick={() => selectNode(id)}
-                                className={selected === id ? "selected" : ""}
-                              >
-                                {id}
-                                {snapshot && (
-                                  <small>
-                                    {number(
-                                      snapshot.elevation_deg[client]?.[id] ?? 0,
-                                      1,
-                                    )}
-                                    °
-                                  </small>
-                                )}
-                              </button>
-                            ))
-                          ) : (
-                            <span className="muted">
-                              Нет контактов с клиентом
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="inspector-empty">
-                      <RouteIcon size={30} />
-                      <h3>От клиента до шлюза</h3>
-                      <p>
-                        После расчёта здесь появятся маршрут, расстояния и
-                        причины перерывов.
-                      </p>
-                    </div>
-                  )}
-                  {(selectedSat || selectedGround) && (
-                    <div className="object-card">
-                      <div>
-                        <strong>{selected}</strong>
-                        <button
-                          className="icon-button"
-                          aria-label="Снять выбор объекта"
-                          onClick={() => setSelected(null)}
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                      {selectedSat ? (
-                        <>
-                          <span>
-                            {selectedSat.plane_id} · очередь{" "}
-                            {selectedSat.launch_batch}
-                          </span>
-                          <p
-                            className={
-                              selectedSat.active ? "text-green" : "text-amber"
-                            }
-                          >
-                            {selectedSat.state === "active"
-                              ? "Аппарат активен"
-                              : selectedSat.state === "failed"
-                                ? "Аппарат недоступен по отказу"
-                                : "Аппарат ещё не запущен"}
-                          </p>
-                          <small>
-                            ECEF, км: {number(selectedSat.x_km, 1)} /{" "}
-                            {number(selectedSat.y_km, 1)} /{" "}
-                            {number(selectedSat.z_km, 1)}
-                          </small>
-                        </>
-                      ) : (
-                        <>
-                          <span>{selectedGround!.name}</span>
-                          <p>
-                            {selectedGround!.lat_deg}° ·{" "}
-                            {selectedGround!.lon_deg}°
-                          </p>
-                          <small>
-                            {selectedGround!.online
-                              ? "Доступен"
-                              : "Шлюз отключён"}
-                          </small>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  <div className="inspector-footnote">
-                    <Info size={14} />
-                    <span>
-                      Минимум переходов, затем длина пути. Наземные пункты не
-                      ретранслируют трафик.
-                    </span>
-                  </div>
-                </aside>
-              </div>
-              <div className="network-stats">
-                <span>
-                  <Satellite size={14} />
+                <button
+                  className="metric-card outage-metric"
+                  disabled={!maxOutage}
+                  onClick={() => {
+                    if (maxOutage) {
+                      setIndex(maxOutage.start_s / scenario.environment.step_s);
+                      setTab("outages");
+                      setPlaying(false);
+                    }
+                  }}
+                >
+                  <span className="metric-label">
+                    <Clock3 size={15} />
+                    Максимальный перерыв
+                  </span>
                   <strong>
-                    {snapshot?.network.active_satellites ?? "—"}
-                  </strong>{" "}
-                  активных
-                </span>
-                <span>
-                  <Activity size={14} />
-                  <strong>{snapshot?.network.isl_edges ?? "—"}</strong>{" "}
-                  ISL-контактов
-                </span>
-                <span>
-                  <Radio size={14} />
-                  <strong>
-                    {snapshot?.network.component_count ?? "—"}
-                  </strong>{" "}
-                  компонент сети
-                </span>
-                <span className="model-note">
-                  {scenario.environment.altitude_km} км ·{" "}
-                  {scenario.environment.min_elevation_deg}° min · ISL{" "}
-                  {number(scenario.environment.isl_range_km)} км
-                </span>
+                    {metric ? duration(metric.max_outage_s) : "—"}
+                  </strong>
+                  <span className="metric-note">
+                    {metric
+                      ? `${metric.outage_count} перерывов за период`
+                      : "Результат после расчёта"}
+                    {maxOutage && <ArrowRight size={14} />}
+                  </span>
+                </button>
               </div>
-            </section>
 
-            {result && (
-              <Timeline
-                result={result}
-                scenario={scenario}
-                index={index}
-                client={client}
-                playing={playing}
-                onIndex={(i) => {
-                  setIndex(i);
-                  setPlaying(false);
-                }}
-                onClient={setClient}
-                onPlaying={setPlaying}
-              />
-            )}
-            {!result && (
-              <div className="before-run-note">
-                <Clock3 size={18} />
-                <span>
-                  <strong>
-                    {scenario.environment.horizon_s /
-                      scenario.environment.step_s}{" "}
-                    расчётных отсчётов
-                  </strong>{" "}
-                  за {duration(scenario.environment.horizon_s)}. Timeline
-                  появится после моделирования.
-                </span>
-              </div>
-            )}
-            <footer className="result-footer">
-              <div>
-                <ShieldCheck size={16} />
-                <span>
-                  {result ? (
-                    <>
-                      Расчёт {runId?.slice(0, 8)} ·{" "}
-                      {number(result.provenance.elapsed_s, 2)} с · модель{" "}
-                      {result.provenance.engine_version}
-                    </>
-                  ) : (
-                    "Круговые орбиты · сферическая Земля · модель организаторов"
-                  )}
-                </span>
-              </div>
-              <div>
-                <button
-                  className="quiet"
-                  disabled={!runId}
-                  onClick={() => download(`/runs/${runId}/scenario`)}
-                >
-                  <FileJson size={16} />
-                  Сценарий
-                </button>
-                <button
-                  className="secondary"
-                  disabled={!result}
-                  onClick={() => download(`/runs/${runId}/export`)}
-                >
-                  <ArrowDownToLine size={16} />
-                  Выгрузить результат
-                </button>
-              </div>
-            </footer>
-          </>
-        )}
-        {initializing && (
-          <div className="empty-state">
-            <LoaderCircle className="spin" size={26} />
-            <p>Загружаем рабочую область…</p>
-          </div>
-        )}
+              <section className="workbench">
+                <div className="workbench-bar">
+                  <div className="workbench-tabs">
+                    <button
+                      className={tab === "network" ? "selected" : ""}
+                      onClick={() => setTab("network")}
+                    >
+                      <Orbit size={17} />
+                      Сеть и маршрут
+                    </button>
+                    <button
+                      className={tab === "outages" ? "selected" : ""}
+                      onClick={() => setTab("outages")}
+                      disabled={!result}
+                    >
+                      <Activity size={17} />
+                      Перерывы{metric && <span>{metric.outage_count}</span>}
+                    </button>
+                  </div>
+                  <div className="current-time">
+                    <span>
+                      {snapshotBusy ? "Обновляем состояние" : "Время от начала"}
+                    </span>
+                    <strong>{time(index * scenario.environment.step_s)}</strong>
+                    {snapshotBusy && (
+                      <LoaderCircle size={13} className="spin" />
+                    )}
+                  </div>
+                </div>
+                <div className="workbench-body">
+                  <div className="primary-surface">
+                    {tab === "network" ? (
+                      <NetworkView
+                        scenario={scenario}
+                        snapshot={snapshot}
+                        client={client}
+                        selected={selected}
+                        onSelect={selectNode}
+                        busy={snapshotBusy}
+                      />
+                    ) : (
+                      <section className="outages-view">
+                        <div className="outages-heading">
+                          <div>
+                            <span className="eyebrow">
+                              {client} · ПЕРИОД{" "}
+                              {duration(scenario.environment.horizon_s)}
+                            </span>
+                            <h2>Интервалы без маршрута</h2>
+                          </div>
+                          <span className="muted">
+                            Всего {duration(metric?.total_outage_s ?? 0)}
+                          </span>
+                        </div>
+                        {metric?.outages.length ? (
+                          <div className="outages-table-wrap">
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Начало</th>
+                                  <th>Конец</th>
+                                  <th>Длительность</th>
+                                  <th>Причина</th>
+                                  <th />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {metric.outages.map((o) => (
+                                  <tr
+                                    key={o.start_s}
+                                    className={
+                                      index * scenario.environment.step_s >=
+                                        o.start_s &&
+                                      index * scenario.environment.step_s <
+                                        o.end_s
+                                        ? "current"
+                                        : ""
+                                    }
+                                  >
+                                    <td>{time(o.start_s)}</td>
+                                    <td>{time(o.end_s)}</td>
+                                    <td>{duration(o.duration_s)}</td>
+                                    <td>
+                                      {Object.keys(o.reason_samples)
+                                        .map(
+                                          (r) =>
+                                            reasonText[
+                                              r as keyof typeof reasonText
+                                            ],
+                                        )
+                                        .join(" · ")}
+                                    </td>
+                                    <td>
+                                      <button
+                                        className="icon-button"
+                                        aria-label={`Показать перерыв ${time(o.start_s)}`}
+                                        onClick={() => {
+                                          setIndex(
+                                            o.start_s /
+                                              scenario.environment.step_s,
+                                          );
+                                          setTab("network");
+                                          setPlaying(false);
+                                        }}
+                                      >
+                                        <ArrowRight size={16} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="empty-state">
+                            <Check size={28} />
+                            <h3>Связь без перерывов</h3>
+                            <p>На каждом отсчёте существует путь до шлюза.</p>
+                          </div>
+                        )}
+                      </section>
+                    )}
+                  </div>
+                  <aside className="inspector" aria-label="Инспектор маршрута">
+                    <div className="inspector-heading">
+                      <span className="eyebrow">Маршрут</span>
+                      <strong>
+                        {client || "Клиент"}
+                        <ArrowRight size={16} />
+                        {sample?.gateway_id ?? "Шлюз"}
+                      </strong>
+                    </div>
+                    {sample ? (
+                      <>
+                        <div
+                          className="route-status"
+                          style={
+                            {
+                              "--state-color": reasonColor[sample.reason],
+                            } as React.CSSProperties
+                          }
+                        >
+                          {sample.path.length ? (
+                            <Check size={17} />
+                          ) : (
+                            <AlertTriangle size={17} />
+                          )}
+                          <span>{reasonText[sample.reason]}</span>
+                        </div>
+                        <div className="route-numbers">
+                          <div>
+                            <strong>{sample.hop_count ?? "—"}</strong>
+                            <span>переходов</span>
+                          </div>
+                          <div>
+                            <strong>
+                              {sample.distance_km !== null
+                                ? number(sample.distance_km)
+                                : "—"}
+                            </strong>
+                            <span>км · длина пути</span>
+                          </div>
+                        </div>
+                        {sample.path.length > 0 ? (
+                          <div
+                            className="route-chain"
+                            aria-label="Последовательность узлов маршрута"
+                          >
+                            {sample.path.map((id, i) => (
+                              <div className="route-chain-item" key={id}>
+                                <span
+                                  className={`route-node-symbol ${i === 0 || i === sample.path.length - 1 ? "ground" : ""}`}
+                                />
+                                <button
+                                  onClick={() => selectNode(id)}
+                                  className={id === selected ? "selected" : ""}
+                                >
+                                  {id}
+                                  <small>
+                                    {i === 0
+                                      ? "Клиентский пункт"
+                                      : i === sample.path.length - 1
+                                        ? "Наземный шлюз"
+                                        : scenario.design.satellites.find(
+                                            (s) => s.id === id,
+                                          )?.plane_id}
+                                  </small>
+                                </button>
+                                {i < sample.path.length - 1 && (
+                                  <span className="edge-distance">
+                                    {snapshot
+                                      ? number(
+                                          snapshot.edges.find(
+                                            ([a, b]) =>
+                                              (a === id &&
+                                                b === sample.path[i + 1]) ||
+                                              (b === id &&
+                                                a === sample.path[i + 1]),
+                                          )?.[2] ?? 0,
+                                        )
+                                      : "…"}{" "}
+                                    км
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="diagnosis">
+                            <p>
+                              {sample.reason === "no_client_coverage"
+                                ? "Из пункта не виден ни один активный аппарат выше порога возвышения."
+                                : sample.reason === "all_gateways_offline"
+                                  ? "Клиент видит спутники, но все наземные шлюзы находятся в периодах недоступности."
+                                  : sample.reason === "no_gateway_contact"
+                                    ? "Клиент видит спутники. Доступные шлюзы сейчас не имеют контакта со спутниковой сетью."
+                                    : "Клиент и доступные шлюзы имеют контакты, но их спутниковые компоненты не соединены."}
+                            </p>
+                            {snapshotRow?.facts && (
+                              <dl>
+                                <dt>Компоненты клиента</dt>
+                                <dd>
+                                  {snapshotRow.facts.client_component_ids
+                                    .map((i) => i + 1)
+                                    .join(", ") || "—"}
+                                </dd>
+                                <dt>Компоненты шлюзов</dt>
+                                <dd>
+                                  {snapshotRow.facts.gateway_component_ids
+                                    .map((i) => i + 1)
+                                    .join(", ") || "—"}
+                                </dd>
+                              </dl>
+                            )}
+                          </div>
+                        )}
+                        <div className="inspector-section">
+                          <span className="eyebrow">
+                            ВИДИМЫЕ АППАРАТЫ ·{" "}
+                            {sample.visible_satellite_ids.length}
+                          </span>
+                          <div className="chips">
+                            {sample.visible_satellite_ids.length ? (
+                              sample.visible_satellite_ids.map((id) => (
+                                <button
+                                  key={id}
+                                  onClick={() => selectNode(id)}
+                                  className={selected === id ? "selected" : ""}
+                                >
+                                  {id}
+                                  {snapshot && (
+                                    <small>
+                                      {number(
+                                        snapshot.elevation_deg[client]?.[id] ??
+                                          0,
+                                        1,
+                                      )}
+                                      °
+                                    </small>
+                                  )}
+                                </button>
+                              ))
+                            ) : (
+                              <span className="muted">
+                                Нет контактов с клиентом
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="inspector-empty">
+                        <RouteIcon size={30} />
+                        <h3>От клиента до шлюза</h3>
+                        <p>
+                          После расчёта здесь появятся маршрут, расстояния и
+                          причины перерывов.
+                        </p>
+                      </div>
+                    )}
+                    {(selectedSat || selectedGround) && (
+                      <div className="object-card">
+                        <div>
+                          <strong>{selected}</strong>
+                          <button
+                            className="icon-button"
+                            aria-label="Снять выбор объекта"
+                            onClick={() => setSelected(null)}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                        {selectedSat ? (
+                          <>
+                            <span>
+                              {selectedSat.plane_id} · очередь{" "}
+                              {selectedSat.launch_batch}
+                            </span>
+                            <p
+                              className={
+                                selectedSat.active ? "text-green" : "text-amber"
+                              }
+                            >
+                              {selectedSat.state === "active"
+                                ? "Аппарат активен"
+                                : selectedSat.state === "failed"
+                                  ? "Аппарат недоступен по отказу"
+                                  : "Аппарат ещё не запущен"}
+                            </p>
+                            <small>
+                              Координаты, км: {number(selectedSat.x_km, 1)} /{" "}
+                              {number(selectedSat.y_km, 1)} /{" "}
+                              {number(selectedSat.z_km, 1)}
+                            </small>
+                          </>
+                        ) : (
+                          <>
+                            <span>{selectedGround!.name}</span>
+                            <p>
+                              {selectedGround!.lat_deg}° ·{" "}
+                              {selectedGround!.lon_deg}°
+                            </p>
+                            <small>
+                              {selectedGround!.online
+                                ? "Доступен"
+                                : "Шлюз отключён"}
+                            </small>
+                          </>
+                        )}
+                      </div>
+                    )}
+                    <div className="inspector-footnote">
+                      <Info size={14} />
+                      <span>
+                        Минимум переходов, затем длина пути. Наземные пункты не
+                        ретранслируют трафик.
+                      </span>
+                    </div>
+                  </aside>
+                </div>
+                <div className="network-stats">
+                  <span>
+                    <Satellite size={14} />
+                    <strong>
+                      {snapshot?.network.active_satellites ?? "—"}
+                    </strong>{" "}
+                    активных
+                  </span>
+                  <span>
+                    <Activity size={14} />
+                    <strong>{snapshot?.network.isl_edges ?? "—"}</strong>{" "}
+                    ISL-контактов
+                  </span>
+                  <span>
+                    <Radio size={14} />
+                    <strong>
+                      {snapshot?.network.component_count ?? "—"}
+                    </strong>{" "}
+                    компонент сети
+                  </span>
+                  <span className="model-note">
+                    {scenario.environment.altitude_km} км ·{" "}
+                    {scenario.environment.min_elevation_deg}° min · ISL{" "}
+                    {number(scenario.environment.isl_range_km)} км
+                  </span>
+                </div>
+              </section>
+
+              {result && (
+                <Timeline
+                  result={result}
+                  scenario={scenario}
+                  index={index}
+                  client={client}
+                  playing={playing}
+                  onIndex={(i) => {
+                    setIndex(i);
+                    setPlaying(false);
+                  }}
+                  onClient={setClient}
+                  onPlaying={setPlaying}
+                />
+              )}
+              {!result && (
+                <div className="before-run-note">
+                  <Clock3 size={18} />
+                  <span>
+                    <strong>
+                      {scenario.environment.horizon_s /
+                        scenario.environment.step_s}{" "}
+                      расчётных отсчётов
+                    </strong>{" "}
+                    за {duration(scenario.environment.horizon_s)}. Timeline
+                    появится после моделирования.
+                  </span>
+                </div>
+              )}
+              {result && (
+                <SnapshotDetails
+                  snapshot={snapshot}
+                  client={client}
+                  scenario={scenario}
+                  onFailure={createFailure}
+                />
+              )}
+              <footer className="result-footer">
+                <div>
+                  <span>{result ? "Сохранить результаты" : ""}</span>
+                </div>
+                <div>
+                  <button
+                    className="quiet"
+                    disabled={!runId}
+                    onClick={() => download(`/runs/${runId}/scenario`)}
+                  >
+                    <FileJson size={16} />
+                    Сценарий
+                  </button>
+                  <button
+                    className="secondary"
+                    disabled={!result}
+                    onClick={() => download(`/runs/${runId}/export`)}
+                  >
+                    <ArrowDownToLine size={16} />
+                    Выгрузить результат
+                  </button>
+                </div>
+              </footer>
+            </>
+          )}
+          {initializing && (
+            <div className="empty-state">
+              <LoaderCircle className="spin" size={26} />
+              <p>Загружаем рабочую область…</p>
+            </div>
+          )}
+        </div>
       </main>
 
       <dialog
@@ -1105,7 +1211,7 @@ export default function App() {
       >
         <div className="dialog-heading">
           <div>
-            <span className="eyebrow">ПАСПОРТ СЦЕНАРИЯ</span>
+            <span className="eyebrow">Параметры</span>
             <h2>{scenario?.meta.title}</h2>
           </div>
           <button

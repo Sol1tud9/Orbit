@@ -30,6 +30,9 @@ test("all four organizer scenarios, timeline, route and export", async ({
       "1",
     );
     if (label === "Полная группировка") {
+      expect(await page.locator("body").innerText()).not.toMatch(
+        /cosmo-A|КосмоХакатон|ИНЖЕНЕРНАЯ РАБОЧАЯ ОБЛАСТЬ/i,
+      );
       await expect(page.locator(".route-status")).toContainText(
         "Маршрут доступен",
       );
@@ -37,6 +40,13 @@ test("all four organizer scenarios, timeline, route and export", async ({
         path: "test-results/full-desktop.png",
         fullPage: true,
       });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({
+        path: "test-results/full-mobile.png",
+        fullPage: true,
+      });
+      await page.setViewportSize({ width: 1440, height: 900 });
     }
   }
   await page
