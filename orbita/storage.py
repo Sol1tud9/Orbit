@@ -276,7 +276,6 @@ class Store:
             self.finish_cancelled(run_id)
 
     def result(self, run_id):
-        # Only internally generated IDs are used; API resolves ownership first.
         if len(run_id) != 32 or any(c not in "0123456789abcdef" for c in run_id):
             raise ValueError("Invalid run ID")
         with gzip.open(

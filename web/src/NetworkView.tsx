@@ -30,7 +30,6 @@ const planeColors = [
   "#db8db2",
   "#89c4df",
 ];
-// Natural Earth land polygons distributed by world-atlas. No remote map service.
 const land = feature(landData as never, landData.objects.land as never);
 
 type Props = {

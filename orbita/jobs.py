@@ -100,7 +100,6 @@ class JobManager:
         future.add_done_callback(finished)
 
     def close(self):
-        # Mark owned jobs for cancellation before waiting for process shutdown.
         with self.lock:
             ids = list(self.futures)
         with self.store.connect() as db:

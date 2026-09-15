@@ -12,10 +12,9 @@ web/test-results
 web/playwright-report
 .env
 output
-_local_archive
-research
 backups
 .ruff_cache
 .env.*
 !.env.example
 **/*.log
+tmp

@@ -11,13 +11,10 @@ web/playwright-report/
 var/
 .env
 *.egg-info/
-.sites-runtime/
 .hypothesis/
 *.tsbuildinfo
-_local_archive/
-research/
-docs/*measurements.json
 backups/
 .env.*
 !.env.example
 *.log
+tmp/

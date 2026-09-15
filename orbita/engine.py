@@ -62,7 +62,6 @@ def simulate(
         snap = snapshot(scenario, t_s)
         rows, info = analyze_snapshot(scenario, snap)
         for client, row in rows.items():
-            # Detailed facts are derived on demand from the same immutable run.
             series[client].append({k: v for k, v in row.items() if k != "facts"})
         network.append({k: v for k, v in info.items() if k != "components"})
         if progress and (index % 12 == 0 or index == len(grid) - 1):

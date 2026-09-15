@@ -41,7 +41,6 @@ import ComparisonView from "./ComparisonView";
 import ResilienceView from "./ResilienceView";
 import OptimizationView from "./OptimizationView";
 import SnapshotDetails from "./SnapshotDetails";
-import { useAnalysisTool } from "./webmcp";
 import type { Run, RunResult, Scenario, Snapshot } from "./types";
 
 type CatalogItem = { file: string; title: string; scenario: Scenario };
@@ -98,8 +97,6 @@ export default function App() {
   const cache = useRef(new Map<string, Snapshot>());
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  useAnalysisTool(run, result, client, index);
-
   const fail = (value: unknown) =>
     setError(
       value instanceof ApiError
@@ -113,7 +110,6 @@ export default function App() {
     let disposed = false;
     (async () => {
       try {
-        // Establish the session before parallel requests can set competing cookies.
         await request("/health");
         const [items, runs] = await Promise.all([
           request<CatalogItem[]>("/catalog"),

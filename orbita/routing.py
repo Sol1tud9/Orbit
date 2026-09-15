@@ -23,8 +23,6 @@ def route(topology: Topology, client_id: str) -> dict:
                 depth[neighbor] = depth[node] + 1
                 queue.append(neighbor)
 
-    # Edges between successive BFS layers form a DAG. Optimize the secondary
-    # distance criterion within that DAG, without sacrificing minimum hops.
     best = {client_id: (0.0, (client_id,))}
     for node in order:
         if node not in best or node in topology.online_gateways:

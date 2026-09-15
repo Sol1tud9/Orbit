@@ -1819,7 +1819,6 @@ td {
   }
 }
 
-/* Working controls remain legible at laptop and compact panel widths. */
 .step-input {
   display: flex;
   align-items: center;
